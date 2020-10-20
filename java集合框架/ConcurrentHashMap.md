@@ -17,7 +17,7 @@
 * **ConcurrentHashMap分段锁用的是什么锁?**
 
   * 1.6 1.7使用继承自ReentrantLock的Segment
-  * 1.8是synchronzied
+  * 1.8是cas+synchronzied
 
 * **为什么1.8摒弃了分段锁,改用了synchronized?**
 
@@ -33,6 +33,7 @@
     - 是为了希望遍历的链表被CPU cache缓存,为后续实际put过程中的链表遍历提升性能
   * 1.8版本先判断是否是当前数组下表的第一个object,如果是,cas插入无需加锁,如果不是直接用链表第一个object加锁,这里加的是synchronized,还有红黑树的不同(涉及put)
   * **为什么又用了synchronized?**
+    * synchronized 只锁定当前链表或红黑二叉树的首节点，这样只要 hash 不冲突，就不会产生并发，效率又提升 N 倍。
     * 减小内存开销,要获得reentrantlock支持,那么每个节点都需要继承AQS,但是不是每个节点都需要获取同步支持的,浪费内存
     * synchronized是jvm级别的,jvm在运行时能采取相应的优化措施,而reentrantlock是jdk级别的
 
@@ -51,6 +52,7 @@
 * **ConcurrentHashMap的一致性有了解么?**
 
   * 弱一致性吧,ConcurrentHashMap的弱一致性主要是为了提升效率，是一致性与效率之间的一种权衡。要成为强一致性，就得到处使用锁，甚至是全局锁，这就与Hashtable和同步的HashMap一样了。可能你期望往ConcurrentHashMap底层数据结构中加入一个元素后，立马能对get可见，但ConcurrentHashMap并不能如你所愿
+  * 比如想找到集合中最大的元素,可能chm在这个段中找到了,但是另一个段同时修改了数据,最大值出现在了另一个个段,这就是由于分段锁的存在
 
 * **ConcurrentHashMap能取代HashTable么?**
 
@@ -90,10 +92,8 @@
 
   * 多线程扩容
 
-    * **如果是空**,那么直接插入
+    * **如果不是forward节点**,那么加锁处理,执行数据复制
 
-    * **如果非空也不是forward节点**,那么加锁处理,执行数据复制
-
-    * 巧妙立用forward值,多线程遍历节点,如果一个节点**非空且不是forward节点**,加锁,处理完一个节点就把对应点的值set为forward,另一个线程看到forward,就向后遍历,这样交叉就完成了复制工作,而且还很好的解决了线程安全问题,尽管这个有一些影响效率，但是还是会比hashTable的synchronized要好得多。
+    * **巧妙利用forward值**,多线程遍历节点,如果一个节点**非空且不是forward节点**,加锁,处理完一个节点就把对应点的值set为forward,另一个线程看到forward,就向后遍历,这样交叉就完成了复制工作,而且还很好的解决了线程安全问题,尽管这个有一些影响效率，但是还是会比hashTable的synchronized要好得多。
 
       
